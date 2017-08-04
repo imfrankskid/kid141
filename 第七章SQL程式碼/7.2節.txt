@@ -1,0 +1,66 @@
+--- 7.2 節----------------------------------
+create type type_of_age from tinyint not null
+create type type_of_color from char(12) not null
+create type type_of_price from smallint null
+------
+create rule rule_of_age as @age between 18 and 65
+create rule rule_of_color as @color in ('Red', 'Yellow', 'Blue', 'White', 'Black')
+create rule rule_of_price as @price between 80 and 250
+------
+create default default_of_age as 25
+create default default_of_color as 'Red'
+create default default_of_price as 100
+------
+sp_bindrule rule_of_age, type_of_age  -- 將rule_of_age綁到type_of_age上
+sp_bindrule rule_of_price, 'Books.price' -- 將rule_of_price綁到Books.price屬性上
+sp_bindefault default_of_price, 'Books.price'
+------
+sp_unbindrule type_of_age
+sp_unbindrule 'Books.price'
+sp_unbindefault 'Books.price'
+------
+drop type type_of_age
+
+--- 7.2.1.1 節----------------------------------
+if exists (select * from master.sys.sysdatabases where name = 'BOB')
+  drop database BOB
+go
+create database BOB
+go
+------
+create database BOB_snapshot_1 on (name = BOB, filename =
+' C:\Program Files\Microsoft SQL Server\MSSQL12.MSSQLSERVER\MSSQL\DATA\BOB_snapshot_1.ss')
+as snapshot of BOB
+go
+
+--- 7.2.1.2 節----------------------------------
+alter database BOB modify name = New_BOB
+go
+------
+alter database BOB add file (
+    name = BOBdat1, filename = 'c:\BOB_1.ndf',
+    size = 10MB, maxsize = 50MB, filegrowth = 2MB)
+go
+
+--- 7.2.2.1 節----------------------------------
+select *
+from ::fn_helpcollations()
+------
+sp_rename  'Books.bookname', 'name', 'column'
+
+--- 7.2.4.1 節----------------------------------
+create table XMLBooks(
+id int primary key,
+bookname char(50) not null,
+author xml)
+go
+------
+create primary XML index XML_IX_author on XMLBooks(author)
+go
+------
+create XML index XML_2nd_IX_author on XMLBooks(author)
+using XML index XML_IX_author for path
+go
+------
+drop index XML_2nd_IX_author ON dbo.XMLBooks
+drop index XML_IX_author ON dbo.XMLBooks

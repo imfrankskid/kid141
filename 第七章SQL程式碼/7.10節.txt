@@ -1,0 +1,331 @@
+------7.10.1 節----------------------------------------------------------
+
+create function birthday_eighty_percent_off (@order_date smalldatetime)
+returns table as
+return (select id,bookname, author, birthdate, -- 以下只比較月份與日的資料
+          price = case (abs(datepart(day, @order_date) - datepart(day, birthdate)) +
+                abs(datepart(month, @order_date) - datepart(month, birthdate)))
+               when 0 then price * 0.8  -- 0 表示訂購日與作者生日一樣
+               else price end
+from Birthdate_Books)
+
+------
+select R.Order_date, F.bookname, F.author, F.birthdate, F.price, R.quantity
+from Date_Orders as R 
+cross apply birthday_eighty_percent_off(R.order_date) as F
+where (datepart(day, R.order_date) = datepart(day, F.birthdate) and
+      datepart(month, R.order_date) = datepart(month, F.birthdate) and R.id = F.id)
+
+------
+select T.order_date, B.name, T.bookname, T.author, T.birthdate, T.price, T.quantity
+from (Select R.order_date, R.no, F.bookname, F.author, F.birthdate, F.price, R.quantity
+from Date_Orders as R
+cross apply birthday_eighty_percent_off(R.order_date) as F
+where (datepart(day, R.order_date) = datepart(day, F.birthdate)
+and datepart(month, R.order_date) = datepart(month, F.birthdate)) and R.id = F.id) T, Bookstores B where T.no = B.no
+
+
+------7.10.2 節----------------------------------------------------------
+declare @DeletedData as table (no int, id int, quantity int)
+delete from Orders
+output deleted.no, deleted.id, deleted.quantity into @DeletedData
+where quantity < 20
+select * from @DeletedData       -- 印出被刪除的內容
+insert into Orders(no, id, quantity)   -- 再將被刪資料加回Orders
+output inserted.no, inserted.id, inserted.quantity   -- 回傳加回的資料內容
+select no, id, quantity
+from @DeletedData
+
+
+------7.10.3 節----------------------------------------------------------
+
+select * 
+from Orders
+pivot (sum(quantity) for no in ([1], [2], [3], [4], [5]))
+as P
+
+
+------
+
+select *
+from ( select s.name, b.bookname, o.quantity 
+     from Bookstores s, Orders o, Books b
+     where s.no = o.no and o.id = b.id) T
+pivot (sum(quantity) for [name]
+in ([巨蟹書局], [射手書局], [水瓶書局], [天秤書局], [獅子書局]))
+as P
+
+------
+select * from 
+(select datename(month, o.order_date) as '月份', b.bookname, o.quantity
+ from date_orders o, books b
+ where o.id = b.id) T
+pivot (sum(quantity) for [月份] in ([一月], [二月], [三月], [四月], [五月], [六月]))
+as P
+
+---------------------------
+select  A.id, isnull(A.[1], 0) 巨蟹書局, isnull(A.[2], 0) 射手書局, isnull(A.[3], 0) 水瓶書局,
+ isnull(A.[4], 0) 天秤書局, isnull(A.[5], 0) 獅子書局
+from Orders 
+pivot (sum(quantity) for no in ([1], [2], [3], [4], [5])) as A
+
+---------------------------
+
+select name, sum(sales*(1 - abs(sign(month - 1)))) as Month_1,
+sum(sales*(1 - abs(sign(month - 2)))) as Month_2,
+sum(sales*(1 - abs(sign(month - 3)))) as Month_3
+from Month_Sales group by name
+
+
+---------------------------
+select * from (select no, datename(month, o.order_date) as '月份', b.bookname, o.quantity
+          from date_orders o, Books b 　　-- 總共含四個欄位
+          where o.id = b.id) T
+pivot (sum(quantity) for [月份] in ([一月], [二月], [三月], [四月], [五月], [六月]))　as P 
+order by no
+---------------------------
+
+select Bookname, Author, Price 
+from Product_Property
+pivot (max(Value) for Attr_Name in ([Bookname],[Author],[Price])) as P
+where id in (select id from Product_Name where Prod_Name = '書籍')
+
+----------------------------------
+select Title, Type
+from Product_Property
+pivot (max(Value) for Attr_Name in ([Title],[Type])) as P
+where id in (select id from Product_Name where Prod_Name = 'CD音樂')
+
+-------------------
+
+create procedure open_schema(@Prod_name nchar(30)) 
+as
+begin
+declare X cursor for 
+         select Attr_Name from Product_Name n, Product_Property p
+         where n.id = p.id and n.Prod_Name = @Prod_Name and Tuple_id = 1
+declare @Attr_List nvarchar(max), @Attr_Name nchar(30)
+select @attr_List = ''
+open X
+fetch next from X into @Attr_Name  -- 任何表格至少要有一個attribute
+while (@@fetch_status = 0)
+begin
+    if (@attr_List = '') select @Attr_List = @Attr_list + '['+ rtrim(@Attr_Name)
+    else select @attr_list = @attr_list + '],[' + rtrim(@attr_Name)
+    fetch next from X into @Attr_Name
+end
+if (@attr_List <> '') select @attr_list = @attr_list + ']'
+close X; deallocate X
+declare @pivot_statement nvarchar(max)
+if (@attr_List <> '') select @pivot_statement = 
+'select '+ @attr_list + ' into [' + rtrim(@Prod_Name) + 
+'] from Product_Property pivot (max(value) for Attr_Name in (' + @attr_list + ')) ' + 
+'as P where id in ( select id from Product_Name where Prod_Name ='''+
+ rtrim(@Prod_Name) + ''')'
+if exists(select * from sys.objects where name = @Prod_Name and type = 'U')
+begin
+  declare @drop_command char(100);
+select @drop_command = 'drop table ' + @Prod_Name; execute(@drop_command)
+end
+execute(@pivot_statement)
+end
+go
+
+--------- 
+if exists(select * from sys.objects where name = 'CD音樂' and type = 'U')
+   drop table CD音樂
+
+if exists(select * from sys.objects where name = '書籍' and type = 'U')
+   drop table 書籍
+
+exec open_schema 'CD音樂'; exec open_schema '書籍';
+go
+------
+
+select *
+into Pv
+from ( select s.name, b.bookname, o.quantity 
+     from Bookstores s, Orders o, Books b
+       where s.no = o.no and o.id = b.id) T
+pivot (sum(quantity) for [name]
+in ([巨蟹書局], [射手書局], [水瓶書局], [天秤書局], [獅子書局]))
+as P
+
+---------------------------
+
+select name, bookname, quantity
+from (select bookname, [巨蟹書局], [射手書局], [水瓶書局], [天秤書局], [獅子書局]
+     from Pv) P
+unpivot (quantity for name 
+in ([巨蟹書局], [射手書局], [水瓶書局], [天秤書局], [獅子書局])) 
+as UnPv
+
+
+--------- 7.10.4 節 -----------
+
+if Object_ID('GetErrorInformation', 'P') is not null
+    drop procedure GetErrorInformation
+go
+create procedure GetErrorInformation
+as select  Error_Number() as 錯誤號碼, Error_Severity() as 錯誤嚴重性,
+         Error_State() as 錯誤狀態代碼, Error_Procedure() as 錯誤程序,
+         Error_Line() as 錯誤列號, Error_Message() as 錯誤訊息
+go
+begin Try
+    Select * into Books from Bookstores
+end Try
+begin Catch
+    Exec GetErrorInformation
+end Catch
+
+
+------7.10.5 節----------------------------------------------------
+
+select * into NewOrders from Orders
+go
+
+create trigger Print_EventData on database for drop_table
+as select eventdata()
+------
+
+create table EventLog (
+  PostTime datetime,
+EventType char(30), ServerName char(50),
+  LoginName char(100), UserName char(100), DatabaseName char(50),
+  SchemaName char(30), ObjectName char(30), ObjectType char(30),
+  TSQLCommand nvarchar(max), CommandText nvarchar(max),
+  Primary key (PostTime)
+)
+go
+
+
+----------------
+
+create trigger Get_EventData on database for drop_table
+as
+declare @Eventdata xml
+select @EventData = eventdata()
+truncate table EventLog
+insert into EventLog(PostTime, EventType, ServerName, LoginName, UserName,
+                DatabaseName, SchemaName, ObjectName, ObjectType,
+                TSQLCommand, CommandText)
+values (getdate(),
+      convert(char(30), @EventData.query('data(//EventType)')),
+      convert(char(50), @EventData.query('data(//ServerName)')),
+      convert(char(100), @EventData.query('data(//LoginName)')),
+      CURRENT_USER,
+      convert(char(50), @EventData.query('data(//DatabaseName)')),
+      convert(char(30), @EventData.query('data(//SchemaName)')),
+      convert(char(30), @EventData.query('data(//ObjectName)')),
+      convert(char(30), @EventData.query('data(//ObjectType)')),
+      convert(nvarchar(max), @EventData.query('data(//TSQLCommand)')),
+      convert(nvarchar(max), @EventData.query('data(//CommandText)')))
+
+
+-------- exist(XQuery) ------------
+
+create table XMLBooks(
+id int primary key,
+bookname char(50) not null,
+author xml)
+go
+
+----
+
+insert into XMLBooks values(1, '資料庫系統之理論與實務', '<作者群>
+<作者 姓名="曾守正" 性別="男"/>
+<作者 姓名="周韻寰" 性別="女"/></作者群>')
+insert into XMLBooks values(2, 'SQL Server 2005使用指引', '<作者群>
+<作者 姓名="王小華" 性別="男"/>
+<作者 姓名="林大明" 性別="男"/></作者群>')
+
+-----
+
+select bookname, author.exist('/作者群/作者[@性別="女"]') as 含有女性作者
+from XMLBooks
+
+
+-------- value('XQuery', 'SQLType') ------------
+
+select bookname, author.value('/作者群[1]/作者[1]/@姓名', 'varchar(20)') as 第一作者
+from XMLBooks
+
+-------- node(XQuery) as Table(Column) ------------
+
+declare @books xml
+set @books = '<Book>
+<name>資料庫系統之理論與實務</name>
+<作者群>
+<作者 姓名="曾守正" 性別="男"/>
+<作者 姓名="周韻寰" 性別="女"/>
+</作者群>
+</Book>
+<Book>
+<name>SQL Server 2005使用指引</name>
+<作者群>
+<作者 姓名="王小華" 性別="男"/>
+<作者 姓名="林大明" 性別="男"/>
+</作者群>
+</Book>'
+select Books.Book.query('.') as result
+from @books.nodes('/Book') Books(Book)
+select Books.Book.value('text()[1]', 'varchar(30)') as result
+from @books.nodes('/Book/name') Books(Book)
+go
+
+-------------------
+Select bookname, a.value('@姓名', 'varchar(20)') as author_name
+from xmlbooks
+cross apply author.nodes('/作者群/作者') as Result(a)
+
+-------- modify(insert ...) ------------
+
+declare @x xml
+set @x = '<作者群><作者 姓名="王小華" 性別="男"/>
+<作者 姓名="林大明" 性別="男"/></作者群>'
+set @x.modify('insert <作者 姓名="曾守正" 性別="男"/> as last
+ into /作者群[1]')
+select @x
+
+----
+
+declare @x xml
+set @x = '<作者群><作者 姓名="王小華" 性別="男"/>
+<作者 姓名="林大明" 性別="男"/></作者群>'
+set @x.modify('insert attribute 年齡{"42"} into (//作者)[1]')
+select @x
+
+
+-------- modify(delete ...) ------------
+
+declare @x xml
+set @x = '<作者群><作者 姓名="王小華" 性別="男"/>
+<作者 姓名="林大明" 性別="男"/></作者群>'
+set @x.modify('delete (//作者)[1]')
+select @x
+
+-------- modify(replace value of...with) ------------
+
+declare @x xml
+set @x = '<作者群><作者 姓名="王小華" 性別="男"/>
+<作者 姓名="林大明" 性別="男"/></作者群>'
+set @x.modify('replace value of (/作者群/作者/@姓名)[1] with "王小明"')
+select @x
+
+
+----
+
+declare @x xml
+set @x = '<作者群><作者 性別="男">王小華</作者>
+<作者 性別="男">林大明</作者></作者群>'
+set @x.modify('replace value of (/作者群/作者/text())[1] with "王小明"')
+select @x
+
+----
+
+create table ddltest (a int)
+drop table ddltest
+select * from EventLog
+
+----
+

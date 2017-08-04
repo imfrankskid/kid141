@@ -1,0 +1,4 @@
+伺服器: faur97ylwq.database.windows.net,1433 \r\nSQL 
+資料庫: BOB\r\n使用者名稱: imfrank\r\n\r\nPHP 
+資料物件 (PDO) 範例程式碼:\r\n\r\ntry {\r\n   $conn = new PDO ( \"sqlsrv:server = tcp:faur97ylwq.database.windows.net,1433; Database = BOB\", \"imfrank\", \"{在此輸入您的密碼}\");\r\n    $conn->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );\r\n}\r\ncatch ( PDOException $e ) {\r\n   print( \"Error connecting to SQL Server.\" );\r\n   die(print_r($e));\r\n}\r\n\rSQL Server 
+擴充功能範例程式碼:\r\n\r\n$connectionInfo = array(\"UID\" => \"imfrank@faur97ylwq\", \"pwd\" => \"{在此輸入您的密碼}\", \"Database\" => \"BOB\", \"LoginTimeout\" => 30, \"Encrypt\" => 1);\r\n$serverName = \"tcp:faur97ylwq.database.windows.net,1433\";\r\n$conn = sqlsrv_connect($serverName, $connectionInfo);

@@ -1,0 +1,198 @@
+------7.8.1 節------------------------------------------------------
+--------- 例 7.4 -----------
+if not exists (select * from Bookstores where rank = 35)
+    print '目前沒有rank為35的書局。'
+
+--------- 例 7.5 -----------
+if exists (select * from sys.objects
+    	where name = 'Books' and type = 'U')
+   drop table Books
+------
+if exists (select * from INFORMATION_SCHEMA.TABLES
+    	where table_name = 'Books')
+   drop table Books
+
+--------- 例 7.6 -----------
+declare @count int
+select @count = 0
+while (exists (select * from Books where price < 200)) and (@count < 3)
+begin
+	update Books set price = price * 1.1 where price < 200
+	select @count = @count + 1
+end
+--------- 例 7.7 -----------
+select name as '書局名稱', case rank
+when 10 then  '*'
+when 20 then  '**'
+when 30 then  '***'
+else  '-'
+end as '星數'
+from Bookstores
+------
+declare @t table (id int, name char(30), salary int)
+insert @t values(1, 'Frank S.C. Tseng', 50000)
+select id, name from @t
+
+------7.8.2 節-------------------------------------------------------
+create table Nums(n int not null primary key)
+declare @max as int, @rc as int
+select @max = 10000, @rc = 1
+begin transaction 
+   while @rc <= @max
+   begin
+      insert into Nums values (@rc)
+      set @rc = @rc + 1
+   end
+commit transaction
+
+------
+create table Numbers(n int not null primary key)
+declare @max as int, @rc as int
+select @max = 10000, @rc = 1
+begin transaction
+   insert into Numbers values (1)
+   while @rc * 2 <= @max
+   begin
+      insert into Numbers select n + @rc from Numbers
+      set @rc = @rc * 2
+   end
+   insert into Numbers select n + @rc from Numbers where n + @rc <= @max
+commit transaction
+
+------7.8.3 節-----------------------------------------------------------
+create proc joined_bob_tables
+as	select 	Bookstores.*, Orders.*, Books.*
+	from 	Bookstores, Orders, Books
+	where 	Bookstores.no = Orders.no and Orders.id = Books.id
+------
+create proc bookstores_in_city (@city varchar(40) = '臺北市')
+as 	if (@city is null) 
+	begin
+		select name, city from Bookstores where city is null
+	end
+	else
+	begin
+		select name, city	from Bookstores where city = @city
+	end
+------
+create proc book_sold (@id int, @total int output)
+as
+select @total = SUM(quantity) from Orders
+where id = @id
+return
+go
+
+declare @total int
+exec book_sold 1, @total output
+------
+create proc KL_Bookstores (@name char(10))
+as
+if not exists(select * from Bookstores where name = @name)
+    return -1 /* error status */
+select no, name
+from Bookstores
+where city = '臺北市' and name = @name
+return 0     /* 正常執行 */
+go
+
+declare @status int
+exec @status = KL_Bookstores '水瓶書局'
+------7.8.4 節---------------------------------------------------------
+create trigger monitor_Bookstores on Bookstores for delete
+as	delete from Orders
+	where Orders.no in (select no from deleted)
+go
+create trigger monitor_Books on Books for delete
+as	delete from Orders
+	where Orders.id in (select id from deleted)
+go
+------
+alter table Books add discount_price int null
+go
+update Books 
+set discount_price = 0.8 * price
+go
+create trigger insert_discount_price on Books for update
+as	if update (price) 
+	update Books set discount_price = price * 0.8
+go
+------
+create trigger monitor_R on R for insert, update, delete, select
+as 	insert into audit_trail_log
+	values (suser_sname(), db_name(), user_name(), getdate())
+go
+------
+create trigger instead_of_INSERT_Books on Books instead of INSERT
+as 	if not exists(select B.id from Books B, inserted I where B.id = I.id)
+		insert into Books select * from inserted
+	else
+		update Books set bookname = I.bookname, author = I.author, 
+		price = I.price, publisher = I.publisher
+		from Books B, inserted I where B.id = I.id
+------7.8.5 節----------------------------------------------------------
+--------- 例 7.8 -----------
+
+create function Bookstores_order_quantity (@name char(10))
+returns int 
+as
+begin
+declare @count int
+select @count =SUM(quantity)
+from Bookstores, Orders
+where Bookstores.name=@name and Bookstores.no= Orders.no
+return @count
+end
+go
+
+select dbo.Bookstores_order_quantity ('巨蟹書局') as '巨蟹書局的總訂購量'
+
+--------- 例 7.9 -----------
+create function [日期區間](@startdate datetime, @enddate datetime)
+returns @DateTable table ([日期] datetime) 
+as
+begin
+declare @datevar datetime
+select @datevar = @startdate
+while @datevar <= @enddate
+begin
+       insert into @DateTable ([日期]) values (@datevar)
+       select @datevar = Dateadd(day, 1, @datevar)
+end
+return
+end
+go
+
+select * from [日期區間] ('2000/01/01', '2001/01/01')
+--------- 例 7.10 ----------
+create function Books_eighty_percent_off (@author char(10))
+returns table as
+return	(select bookname, author, price = case author
+when @author then price * 0.8
+else price end
+from Books)
+go
+select * from Books_eighty_percent_off ('老子')
+
+------7.8.6 節----------------------------------------------------------
+--------- 例 7.11 ----------
+create function Generate_duration()
+returns @DateTable Table (id int, Date smalldatetime) as
+begin
+declare X cursor read_only for
+select id, startdate, enddate from Log order by id
+declare @id int, @startdate smalldatetime, @enddate smalldatetime
+open X
+fetch next from X into @id, @startdate, @enddate
+while (@@fetch_status = 0) begin
+while (@startdate <= @enddate) begin
+insert into @DateTable(id, date) values (@id, @startdate)
+select @startdate = Dateadd(day, 1, @startdate)
+end
+fetch next from X into @id, @startdate, @enddate
+end
+close X
+deallocate X
+return
+end
+go
+

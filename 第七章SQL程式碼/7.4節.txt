@@ -1,0 +1,92 @@
+------7.4.1.1 節--------------------------------------------------------
+insert into	Books (id, bookname, author, publisher)
+values	(7, '孫子兵法', '孫子', '大唐出版社')
+------
+insert into	Books
+values	(7, '孫子兵法', '孫子', 200, '大唐出版社')
+------7.4.1.2 節--------------------------------------------------------
+create table Total_books_sold
+(id char(6) not null,
+ bookname char(20) not null,
+ total_qty integer not null )
+go
+insert into	Total_books_sold (id, bookname, total_qty)
+select	Books.id, bookname, SUM(quantity)
+from	Books, Orders
+where	Books.id = Orders.id
+group by	Books.id, bookname
+------7.4.2.1 節---------------------------------------------------------
+delete from 	Books
+where 	id = 7
+------
+delete from Books where price = 120
+------
+delete from Books where price > 180
+------7.4.2.2 節---------------------------------------------------------
+delete from	Orders
+where	120 = (	select	price from Books
+		where	Books.id = Orders.id)
+------
+delete from	Orders
+where	id in (	select	id
+		from	Books
+		where	price = 120)
+------
+begin transaction
+	delete from	Bookstores
+	where	no = 2
+	delete from	Orders
+	where	no = 2
+commit
+------
+begin transaction
+	delete from 	Orders 
+	where 	no = 2
+	delete from 	Bookstores
+	where 	no = 2
+commit
+------7.4.3.1 節--------------------------------------------------------
+update	Bookstores
+set	name = '元智書坊', rank = rank + 10, city = '桃園市'
+where	no = 2
+------
+update Books set price = price + 10
+where price = 120
+------
+update	Books set price = null
+where	price = 120
+------7.4.3.2 節---------------------------------------------------------
+update	Orders
+set	quantity = 0
+where	120 = (	select	price
+		from	Books
+		where	Books.id = Orders.id)
+------
+update 	Orders
+set	quantity = 0
+where	id in (	select	id
+		from	Books
+		where	price = 120)
+------7.4.3.3 節--------------------------------------------------------
+begin transaction
+	update 	Bookstores 
+	set 	no = 9
+	where 	no = 2
+	update 	Orders 
+	set 	no = 9
+	where 	no = 2
+commit
+------
+update 	Bookstores set no = 9
+where 	no = 2
+------
+update 	Exam
+set 	Oral_Test = ToBeUpdated.Oral_Test
+from  	Exam, ToBeUpdated 
+where 	Exam.no = ToBeUpdated.no
+
+
+
+
+
+

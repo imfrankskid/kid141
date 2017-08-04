@@ -1,0 +1,272 @@
+------7.3.1 節--------------------------------------------------------
+select	bookname, author, price, publisher
+from	Books
+go
+select 	*
+from 	Books
+go
+select 	distinct price
+from 	Books
+go
+------7.3.2 節--------------------------------------------------------
+select	bookname, '打八折後的價格 = ' as discount, price * 0.8 as new_price
+from	Books
+go
+
+------7.3.3 節--------------------------------------------------------
+select 	Bookstores.*, Orders.*
+from 	Bookstores, Orders
+where 	Bookstores.no = Orders.no
+go
+------
+select 	Bookstores.*, Orders.*
+from 	A..Bookstores, B..Orders
+where 	Bookstores.no = Orders.no
+go
+select 	Bookstores.*, Orders.*
+from 	A.dbo.Bookstores, B.dbo.Orders
+where 	Bookstores.no = Orders.no
+------
+select	Bookstores.no, name, rank, city, id, quantity
+from	Bookstores, Orders
+where	Bookstores.no = Orders.no
+------
+select	First.name, Second.name
+from	Bookstores First, Bookstores Second
+where	First.rank = Second.rank
+and	First.no < Second.no
+------7.3.4 節--------------------------------------------------------
+select	no, name, rank, city
+from	Bookstores
+where	rank > 10 and no > 2
+------
+select	*
+from	Bookstores
+where	city is null
+------
+select 	*
+from 	Bookstores
+where 	city like '臺_市'
+------
+select 	no, name, rank, city
+from 	Bookstores
+where 	not (rank >= 20 and city like '臺%市')
+------
+select	no, name, rank, city
+from	Bookstores
+where	rank in (20, 30) and city in ('臺北市', '臺中市', '新竹市')
+------7.3.5 節---------------------------------------------------------
+select 	no, name, class, address, Zipdata.zip, district
+from 	Students, Zipdata
+where 	Students.zip = Zipdata.zip
+------
+select 	no, name, class, address, Zipdata.zip, district
+from 	Students left outer join Zipdata
+on 	Students.zip = Zipdata.zip
+------7.3.6 節---------------------------------------------------------
+select	no, name, rank, city
+from	Bookstores
+order	by 3 desc, no  -- 以第3欄rank為主要排序欄位，次要排序欄位為no 
+------7.3.7 節---------------------------------------------------------
+select	COUNT(*)
+from	Bookstores
+------
+select	COUNT(distinct no)
+from	Orders
+------
+select	SUM(quantity)
+from	Orders
+where	no = 2
+------
+select	SUM(distinct quantity)
+from	Orders
+where	no = 1
+------
+select	AVG(quantity)
+from	Orders
+where	no = 2
+------
+select	AVG(distinct quantity)
+from	Orders
+where	no = 1
+------
+select	MAX(quantity)
+from	Orders
+where	no = 1
+------
+select	MIN(quantity)
+from	Orders
+where	no = 1
+------
+select id, bookname, price, ROW_NUMBER() OVER (order by price) as 列編號,
+RANK() OVER (order by price) as 價格排名由小到大,
+DENSE_RANK() OVER (order by price) as 緊密價格排名,
+NTILE(3) OVER (order by price) as 依排名分成3區段
+from Books
+------
+select id, bookname, price, category,
+RANK() OVER (partition by category order by price) as 同類中排名,
+DENSE_RANK() OVER (partition by category order by price) as 同類緊密排名,
+NTILE(3) OVER (partition by category order by price) as 依排名分3區段
+from Books
+------7.3.8 節----------------------------------------------------------
+select	no, COUNT(distinct id)
+from	Orders
+group by no
+------
+select	no, SUM(quantity)
+from	Orders
+group by no
+------
+select	Bookstores.no, name, sum(quantity)
+from	Bookstores, Orders
+where	Bookstores.no = Orders.no
+group by Bookstores.no, name
+------
+select no, id, SUM(quantity) as [訂購量]
+from	Orders
+group by no, id with cube
+------
+select case when (grouping(name) = 1) and (grouping(bookname) = 0) then '小計' 
+          when (grouping(name) = 1) and (grouping(bookname) = 1) then '總計'
+          else isnull(name, '<NULL>')
+       end as [name], 
+       case when (grouping(bookname) = 1) and (grouping(name) = 0) then '小計'
+           when (grouping(bookname) = 1) and (grouping(name) = 1) then '總計'
+           else isnull(bookname, '<NULL>')
+       end as [bookname], sum(quantity) as [訂購量]
+from Orders O, Bookstores B, Books K 
+where O.no = B.no and O.id = K.id
+group by name, bookname with cube
+order by name
+------7.3.9 節------------------------------------------------------------
+select	no, SUM(quantity)
+from	Orders
+group by	no
+ having	SUM(quantity) > 80
+------7.3.10.1 節-----------------------------------------------------------
+select	name, rank
+from	Bookstores
+where	rank < ( select AVG(rank)　　/* 子查詢的結果恰好只有一個值 */
+		from Bookstores)
+------
+declare	@avg_rank float
+select	@avg_rank = AVG(rank)
+from	Bookstores
+select	name, rank
+from	Bookstores
+where	rank < @avg_rank
+------
+select	name
+from	Bookstores
+where	rank = (select rank　　/* 子查詢的結果最多只會有一個值 */
+		from Bookstores
+		where no = 1)
+------7.3.10.2 節------------------------------------------------------
+--------- 例 7.1 -----------
+
+select	name
+from	Bookstores
+where	exists (	select *
+		from	Orders
+		where	Orders.no = Bookstores.no
+		and	Orders.id = 2)
+
+
+--------- 例 7.2 -----------
+
+select	name
+from	Bookstores
+where	not exists (	select 	* 
+		from 	Orders
+		where 	Orders.no = Bookstores.no
+		and 	Orders.id = 2)
+
+
+--------- 例 7.3 -----------
+
+select	name
+from	Bookstores
+where	not exists (	select	*
+		from	Books
+		where	not exists (	select	*
+				from	Orders
+				where	Bookstores.no = Orders.no
+				and 	Orders.id = Books.id))
+------7.3.10.3 節-------------------------------------------------------
+select	id
+into	Temp　　　　/* 將結果放入另一個新的關聯表Temp中 */
+from	Orders
+where	no = 3
+
+select	no
+from	Bookstores
+where	not exists (select 	*  -- 找出訂購所有Temp中所列書籍編號的書局編號
+		    from 	Temp  -- 此查詢的意義可以變成： 
+		    where 	not exists (select 	*  -- 找出那些沒有一個Temp中所列書籍
+				            from 	Orders   -- 他不訂購的書局名稱
+				            where 	no = Bookstores.no
+				            and 	id = Temp.id))
+------
+select	distinct no
+from	Orders OX   -- 將OX當作是Orders的另一個別名
+where	not exists (select  *  -- 找出訂購所有 Temp 中所列書籍編號的書局編號
+		    from	Temp  -- 此查詢的意義可變成：找出那些沒有一個Temp中
+		    where	not exists (select 	*  	--所列書籍他不訂購的書局名稱
+				            from 	Orders OY    -- OY是Orders的別名
+				            where	OY.no = OX.no
+				            and		OY.id = Temp.id))
+------
+select	distinct no from  Orders OX
+where	not exists (select  *
+		    from  Orders OY
+		    where no = 3
+		    and  not exists (select * from Orders OZ
+			             where OZ.no = OX.no
+			             and  OZ.id = OY.id))
+------7.3.11 節----------------------------------------------------------
+select	id from Books where price > 160
+union 
+select	id from Orders where no = 2
+go
+select	id from Books where price > 160
+union all
+select	id from Orders where no = 2
+------7.3.12 節----------------------------------------------------------
+select	bookname, '八折價= ', price * 0.8, '銷售量 = ', SUM(quantity)
+from	Books, Orders               -- 合併Books與Orders
+where	Books.id = Orders.id           -- 合併條件
+and	(price >160 or price <150) and quantity > 10   -- 選擇條件
+group by	bookname, price               -- 以1, 3 欄做為組成群組的依據
+ having	SUM(quantity) > 45            -- 過濾各群組
+order by	5 desc                    -- 按SUM(quantity) 由大到小排序
+------7.3.13 節----------------------------------------------------------
+select Tmp.bookname, publisher, real_price, totalquantity_sold
+from (select top 5 bookname, '八折價= ' as discount_title, price * 0.8 as real_price,
+'銷售量 = ' as quantity_title, SUM(quantity) as totalquantity_sold
+	from	Books, Orders
+	where	Books.id = Orders.id
+	and	(price >160 or price <150) and quantity > 10
+	group by	bookname, price
+	 having	SUM(quantity) > 45
+	order by 5 desc) Tmp, Books  -- 若沒有前述的top 5，則order by子句須去除
+where totalquantity_sold > 80 and Tmp.bookname = Books.bookname
+------7.3.14 節---------------------------------------------------------
+select top 10 with ties quantity
+from Orders
+order by quantity
+------
+select *
+from (select top 5 * from Bookstores order by no) b1
+where  (not exists (select *
+                    from   (select top 3 *
+                            from  Bookstores order by no) b2
+                            where b1.no = b2.no))
+------
+select * from (select top 5 * from Bookstores order by no) b1
+except
+select * from (select top 3 * from Bookstores order by no) b2
+------
+select * from (select top 80 * from Real_Estate order by no) R1
+except
+select * from (select top 70 * from Real_Estate order by no) R2

@@ -1,0 +1,8 @@
+create table [UserList] (
+[UserName] [nvarchar] (50) not null ,
+[Password] [nvarchar] (50) not null ,
+[CreateDate] [Datetime] not null,
+constraint [PK_UserList] primary key ([UserName]))
+go
+insert UserList(UserName, Password, CreateDate) values('Frank', 'nkfustmis', getdate())
+insert UserList(UserName, Password, CreateDate) values('Annie', 'cmacis', getdate())
